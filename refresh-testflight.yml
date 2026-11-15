@@ -1,0 +1,48 @@
+name: Scanchris – verfügbare TestFlight-Version veröffentlichen
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      ASC_PRIVATE_KEY: ${{ secrets.FASTLANE_KEY }}
+      ASC_BETA_GROUP_ID: ${{ vars.ASC_BETA_GROUP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python-Abhängigkeiten
+        run: python -m pip install --disable-pip-version-check 'PyJWT>=2.8,<3' 'cryptography>=42,<50'
+      - name: Freigegebene TestFlight-Version prüfen
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$ASC_BETA_GROUP_ID" ]; then
+            echo '::notice::ASC_BETA_GROUP_ID fehlt. Nur der optionale Update-Hinweis ist noch nicht eingerichtet.'
+            exit 0
+          fi
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo '::error::Fastlane-App-Store-Connect-Zugang fehlt'
+            exit 1
+          fi
+          python scripts/refresh_testflight_manifest.py site/latest-build.json
+          if [ -s site/latest-build.json ]; then
+            echo 'has_manifest=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Öffentliche Versions-JSON über GitHub Pages veröffentlichen
+        if: steps.check.outputs.has_manifest == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          keep_files: true
+          enable_jekyll: false

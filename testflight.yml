@@ -1,0 +1,101 @@
+name: Scanchris – TestFlight hochladen
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Scanchris signieren und zu TestFlight hochladen
+    runs-on: macos-26
+    env:
+      TEAMID: ${{ secrets.TEAMID }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      APP_IDENTIFIER: ${{ vars.BUNDLE_ID || 'de.markus014.scanchris' }}
+      IPA_PATH: Scanchris.ipa
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bestehende Apple- und Match-Zugangsdaten prüfen
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in TEAMID GH_PAT MATCH_PASSWORD FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY APP_IDENTIFIER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Fehlt oder nicht zugänglich: $name"
+              exit 1
+            fi
+          done
+          if [ "$APP_IDENTIFIER" != "de.markus014.scanchris" ]; then
+            echo "::error::BUNDLE_ID muss de.markus014.scanchris sein"
+            exit 1
+          fi
+      - name: Abhängigkeiten installieren
+        run: |
+          brew install xcodegen
+          gem install bundler -v 2.7.2
+          bundle _2.7.2_ install
+      - name: Xcode-Projekt erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcodegen generate --spec project.yml
+          xcodebuild -list -project DokuScan.xcodeproj
+      - name: Signierung mit vorhandenem Fastlane Match vorbereiten
+        run: bundle _2.7.2_ exec fastlane ios prepare_signing
+      - name: GitHub-Pages-Versionsadresse ermitteln
+        shell: bash
+        run: |
+          OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="${GITHUB_REPOSITORY#*/}"
+          echo "DOKUSCAN_UPDATE_URL=https://${OWNER}.github.io/${REPO}/latest-build.json" >> "$GITHUB_ENV"
+      - name: Scanchris-Archiv und IPA erstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project DokuScan.xcodeproj \
+            -scheme DokuScan \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Scanchris.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAMID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_IDENTIFIER" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="match AppStore $APP_IDENTIFIER" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            DOKUSCAN_UPDATE_URL="$DOKUSCAN_UPDATE_URL"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string>
+          <key>signingStyle</key><string>manual</string>
+          <key>teamID</key><string>$TEAMID</string>
+          <key>provisioningProfiles</key><dict>
+          <key>$APP_IDENTIFIER</key><string>match AppStore $APP_IDENTIFIER</string>
+          </dict></dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Scanchris.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/scanchris-export"
+          IPA=$(find "$RUNNER_TEMP/scanchris-export" -maxdepth 1 -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then echo '::error::Keine IPA gefunden'; exit 1; fi
+          cp "$IPA" Scanchris.ipa
+      - name: Scanchris zu TestFlight hochladen
+        run: bundle _2.7.2_ exec fastlane ios beta
+      - name: Diagnoseprotokolle bei Fehlschlag
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanchris-signing-diagnostics
+          path: |
+            ~/Library/Logs/gym/
+            ~/Library/Logs/DiagnosticReports/
