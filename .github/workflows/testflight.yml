@@ -1,0 +1,94 @@
+name: TestFlight – Archivieren und hochladen
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Signiertes iOS-Release erstellen
+    runs-on: macos-26
+    env:
+      BUNDLE_ID: ${{ vars.BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+      MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
+      ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notwendige Zugangsdaten prüfen
+        run: |
+          for x in BUNDLE_ID APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID CERTIFICATE_PASSWORD CERTIFICATE_BASE64 MOBILEPROVISION_BASE64 ASC_PRIVATE_KEY_BASE64 KEYCHAIN_PASSWORD; do
+            if [ -z "${!x}" ]; then echo "Fehlender Wert: $x"; exit 1; fi
+          done
+      - name: Xcode-Projekt erzeugen
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+          xcodegen generate --spec project.yml
+      - name: Signatur und Provisioning-Profil einrichten
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/dokuscan.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          printf '%s' "$CERTIFICATE_BASE64" | base64 -D > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$MOBILEPROVISION_BASE64" | base64 -D > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY_BASE64" | base64 -D > "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+      - name: GitHub-Pages-Versionsadresse ermitteln
+        run: |
+          OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="${GITHUB_REPOSITORY#*/}"
+          echo "DOKUSCAN_UPDATE_URL=https://${OWNER}.github.io/${REPO}/latest-build.json" >> "$GITHUB_ENV"
+      - name: Release archivieren
+        run: |
+          set -o pipefail
+          xcodebuild -project DokuScan.xcodeproj -scheme DokuScan \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/DokuScan.xcarchive" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            DOKUSCAN_UPDATE_URL="$DOKUSCAN_UPDATE_URL" \
+            archive
+      - name: IPA exportieren
+        run: |
+          python3 scripts/make_export_plist.py
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/DokuScan.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist build/ExportOptions.plist
+      - name: IPA zu TestFlight hochladen
+        run: |
+          IPA=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then echo "Keine IPA gefunden"; exit 1; fi
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+      - name: Technischen Bericht speichern (ohne IPA / Schlüssel)
+        if: always()
+        run: |
+          echo "TestFlight-Workflow: $GITHUB_RUN_NUMBER" > build-info.txt
+          echo "Bundle: $BUNDLE_ID" >> build-info.txt
+          echo "App-Version: 1.0" >> build-info.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dokuscan-build-info
+          path: build-info.txt
