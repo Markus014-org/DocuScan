@@ -41,7 +41,7 @@ struct HomeView: View {
                                 Image(systemName: "doc.text.viewfinder")
                                     .font(.system(size: 39, weight: .semibold))
                                     .foregroundStyle(DokuTheme.orange)
-                                Text("DokuScan")
+                                Text("Scanchris")
                                     .font(.system(size: 39, weight: .bold, design: .rounded))
                                     .foregroundStyle(DokuTheme.ink)
                             }

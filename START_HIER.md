@@ -1,14 +1,32 @@
-# DokuScan – Start in 8 Schritten
+# Scanchris – nächster Schritt (bestehendes GitHub-Repository)
 
-1. **Dieses ZIP entpacken** und **alle enthaltenen Dateien** in ein neues GitHub-Repository mit Branch `main` hochladen.
-2. Unter **Actions → iOS Buildprüfung** zunächst kontrollieren, ob die App auf dem macOS-Runner für iOS kompiliert.
-3. Im **Apple Developer Account** eine Bundle ID für DokuScan und in **App Store Connect** eine neue iOS-App anlegen.
-4. Ein **Apple Distribution**-Zertifikat (`.p12`) und ein passendes App-Store-Provisioning-Profil (`.mobileprovision`) erstellen.
-5. Einen **App Store Connect API Key** (`.p8`) erstellen und eine **TestFlight-Testgruppe** samt eigenem Testaccount einrichten.
-6. Die Variablen `BUNDLE_ID`, `APPLE_TEAM_ID`, `ASC_BETA_GROUP_ID` und alle sieben in der `README.md` beschriebenen **Secrets** im GitHub-Repository hinterlegen.
-7. Unter **Actions → TestFlight – Archivieren und hochladen** den Workflow manuell starten. Nach Apples Verarbeitung/ggf. Testfreigabe DokuScan über **TestFlight** auf dem iPhone installieren.
-8. Unter **Actions → TestFlight – verfügbare Version veröffentlichen** den Versionsabgleich einmalig starten. **Settings → Pages** auf den danach entstandenen Branch `gh-pages` (Root) einstellen. Fortan wird alle 30 Minuten geprüft und beim Öffnen der App oben links türkis auf ein verfügbares Update hingewiesen.
+Diese ZIP ist für **Markus014-org/DocuScan** vorbereitet. Der interne Xcode-Targetname
+bleibt DokuScan, der Anzeigename ist **Scanchris**. Bundle-ID: `de.markus014.scanchris`.
 
-**Die ausführliche Erklärung zu allen Apple-Zugangsdaten und Workflows steht in `README.md`.**
+1. ZIP entpacken. **Nicht die ZIP-Datei selbst** nach GitHub hochladen.
+2. Die enthaltenen Verzeichnisse/Dateien in das vorhandene GitHub-Repository
+   `https://github.com/Markus014-org/DocuScan` auf `main` übernehmen.
+   Bestehende gleichnamige Dateien ersetzen. Der Ordner `.github` ist wichtig.
+   Wenn die GitHub-Weboberfläche einzelne Ordner nicht übernimmt, Dateien in
+   ihrem jeweiligen GitHub-Verzeichnis über `Add file → Upload files` ersetzen.
+3. `BUNDLE_ID` unter `Settings → Secrets and variables → Actions → Variables`
+   kontrollieren: `de.markus014.scanchris`.
+4. Organisations-Secrets `TEAMID`, `GH_PAT`, `MATCH_PASSWORD`, `FASTLANE_KEY_ID`,
+   `FASTLANE_ISSUER_ID`, `FASTLANE_KEY` müssen zugänglich sein. Keine Werte
+   offenlegen oder in GitHub-Dateien hineinschreiben.
+5. `Actions → Scanchris – Apple-Zugänge prüfen → Run workflow` starten.
+6. Ist der Test grün: `Actions → Scanchris – TestFlight hochladen → Run workflow`.
+   **Fastlane Match darf dafür ein eigenes App-Store-Provisioning-Profil
+   für Scanchris erstellen**, benutzt aber die bestehenden Team-Zertifikate.
+7. In App Store Connect → Scanchris → TestFlight den Upload/Build überprüfen und
+   die interne Testgruppe konfigurieren. GitHub-Build erfolgreich ≠ Build schon
+   für Tester freigegeben.
 
-**Wichtig:** Eine Installation über TestFlight ist erst nach erfolgreichem Xcode-Build, Apple-Signierung und TestFlight-Verarbeitung möglich. Das hier gelieferte Archiv enthält die **Quelldateien**, keine bereits signierte `.ipa`.
+Optional für den türkisen Hinweis bei neuer TestFlight-Version:
+- Repository-Variable `ASC_BETA_GROUP_ID` auf die ID der Testgruppe setzen.
+- Workflow `Scanchris – verfügbare TestFlight-Version veröffentlichen` ausführen.
+- GitHub Pages aus `gh-pages`/`(root)` veröffentlichen.
+
+**Wichtig:** Das Paket enthält Quellcode, aber keine signierte IPA. Es wurde
+nicht auf Xcode ausgeführt und nicht zu Apple hochgeladen. Den tatsächlichen
+Build übernimmt GitHub Actions nach dem Hochladen.

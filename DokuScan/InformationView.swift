@@ -6,8 +6,8 @@ struct InformationView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                header("Willkommen bei DokuScan", icon: "doc.text.viewfinder")
-                paragraph("DokuScan erstellt aus abfotografierten Seiten mehrseitige, durchsuchbare PDF-Dateien im DIN-A4-Format. Der Scanner erkennt Dokumentkanten, korrigiert die Perspektive und unterstützt das Scannen mehrerer Seiten hintereinander.")
+                header("Willkommen bei Scanchris", icon: "doc.text.viewfinder")
+                paragraph("Scanchris erstellt aus abfotografierten Seiten mehrseitige, durchsuchbare PDF-Dateien im DIN-A4-Format. Der Scanner erkennt Dokumentkanten, korrigiert die Perspektive und unterstützt das Scannen mehrerer Seiten hintereinander.")
 
                 header("1 · Dokument scannen", icon: "doc.text")
                 paragraph("Auf der Startseite „Dokument scannen“ antippen. Im Apple-Scanner die Seiten nacheinander aufnehmen. Wenn die automatische Aufnahme angeboten wird, hältst du das iPhone ruhig über die Seite. Kontrolliere unten im Scanner die aufgenommenen Seiten und beende den Scan mit „Sichern“ bzw. „Fertig“.")
@@ -21,7 +21,7 @@ struct InformationView: View {
 
                 header("3 · Speicherorte und Dropbox", icon: "folder")
                 paragraph("Im Menü unter „Einstellungen“ → „Neuer Speicherort“ einen Namen eingeben und dann in der iOS-Dateien-App einen bestehenden Ordner auswählen. Der angezeigte Name kann z. B. „Privat“, „Büro“ oder „Verein“ lauten. Entfernen: einen Speicherort in den Einstellungen nach links wischen.")
-                paragraph("Dropbox funktioniert über die offizielle Dropbox-App als Speicheranbieter der iOS-Dateien-App. Aktiviere Dropbox dort unter „Durchsuchen“ und wähle anschließend den Dropbox-Ordner aus. DokuScan hat keine eigene Dropbox-Anmeldung. Die Synchronisierung eines dort abgelegten Dokuments erfolgt durch den Dateianbieter, nicht durch DokuScan. Bei fehlendem Internet kann die Synchronisierung verzögert sein.")
+                paragraph("Dropbox funktioniert über die offizielle Dropbox-App als Speicheranbieter der iOS-Dateien-App. Aktiviere Dropbox dort unter „Durchsuchen“ und wähle anschließend den Dropbox-Ordner aus. Scanchris hat keine eigene Dropbox-Anmeldung. Die Synchronisierung eines dort abgelegten Dokuments erfolgt durch den Dateianbieter, nicht durch Scanchris. Bei fehlendem Internet kann die Synchronisierung verzögert sein.")
 
                 header("4 · Favorisiertes Speichern", icon: "star")
                 paragraph("In „Favoriten“ kannst du deine Ordner sowie „Teilen und Apps“ oder einen E-Mail-Empfänger dauerhaft hinterlegen. Bei „Dokument scannen“ wählst du „Favorisiertes Speichern“ und danach den Favoriten. Ordner werden direkt beschrieben. Für E-Mails öffnet sich das E-Mail-Verfassenfenster, wenn Apple Mail eingerichtet ist; andernfalls öffnet sich die Teilen-Ansicht. Bei anderen Apps und AirDrop erfolgt die Auswahl aus Sicherheitsgründen weiterhin in der iOS-Teilen-Ansicht. Favoriten lassen sich durch Wischen löschen.")
@@ -30,13 +30,13 @@ struct InformationView: View {
                 paragraph("Die Texterkennung verwendet Apples Vision-Framework lokal auf dem iPhone. Der Scan wird als Bild in die PDF gelegt; erkannter Text wird als unsichtbare Textschicht an den passenden Stellen eingebettet. Damit kann der PDF-Text von geeigneten PDF-Apps durchsucht und kopiert werden. Die A4-Seite wird bei abweichendem Seitenverhältnis nicht gestreckt, sondern passend eingepasst.")
 
                 header("6 · Datenschutz und Verschlüsselung", icon: "lock.shield")
-                paragraph("Die App sendet Scans und OCR-Texte nicht an einen DokuScan-Server. Ordnernamen, Favoriten und die Zugriffs-Lesezeichen für gewählte Ordner werden lokal in den App-Einstellungen (UserDefaults) gespeichert; exportierte Dokumente liegen ausschließlich dort, wo du sie ablegst. Für temporäre Freigaben erzeugt DokuScan PDF-Dateien im temporären App-Verzeichnis.")
-                paragraph("DokuScan implementiert keine eigene Ende-zu-Ende-Verschlüsselung. Der App-Sandbox-Schutz und die systemeigene Datenverschlüsselung/Data Protection von iOS gelten für lokale Daten. Dateien auf iCloud Drive oder Dropbox unterliegen der jeweiligen Verschlüsselung, Übertragung und Synchronisierung des Anbieters. Über deren Ende-zu-Ende-Verschlüsselung trifft DokuScan keine Zusage.")
+                paragraph("Die App sendet Scans und OCR-Texte nicht an einen Scanchris-Server. Ordnernamen, Favoriten und die Zugriffs-Lesezeichen für gewählte Ordner werden lokal in den App-Einstellungen (UserDefaults) gespeichert; exportierte Dokumente liegen ausschließlich dort, wo du sie ablegst. Für temporäre Freigaben erzeugt Scanchris PDF-Dateien im temporären App-Verzeichnis.")
+                paragraph("Scanchris implementiert keine eigene Ende-zu-Ende-Verschlüsselung. Der App-Sandbox-Schutz und die systemeigene Datenverschlüsselung/Data Protection von iOS gelten für lokale Daten. Dateien auf iCloud Drive oder Dropbox unterliegen der jeweiligen Verschlüsselung, Übertragung und Synchronisierung des Anbieters. Über deren Ende-zu-Ende-Verschlüsselung trifft Scanchris keine Zusage.")
                 paragraph("Die Versionsprüfung ruft nur eine öffentliche HTTPS-JSON-Datei mit freigegebener TestFlight-Versions- und Buildnummer ab. Es werden keine gescannten Dokumente dafür übertragen. Die App meldet eine neue Version oben links in Türkis, sobald die veröffentlichte Nummer höher als die installierte ist. Der Hinweis erscheint nur, wenn die GitHub-Actions-Versionsveröffentlichung eingerichtet wurde.")
 
                 header("7 · Grenzen und Tipps", icon: "lightbulb")
                 paragraph("Kontrast, Beleuchtung und ruhiges Halten verbessern das Ergebnis. Die automatische Aufnahme wird durch Apples Scanner gesteuert; je nach iOS-Version oder Situation kann eine manuelle Auslösung nötig sein. QR-Codes, handgeschriebene Notizen, Mehrwertsteuer und komplizierte Rechnungen werden nicht immer zuverlässig erkannt. Ohne Zugriff auf den gewählten Speicherort bitte den Ordner erneut hinterlegen. Eine PDF ist durchsuchbar, aber kein rechtlich garantiert vollständig ausgelesenes Rechnungsdatenset.")
-                paragraph("DokuScan enthält keine Eingabe von Uhrzeiten. Sollten später solche Felder hinzukommen, sind iOS-Rad-Zeitwähler vorgesehen.")
+                paragraph("Scanchris enthält keine Eingabe von Uhrzeiten. Sollten später solche Felder hinzukommen, sind iOS-Rad-Zeitwähler vorgesehen.")
             }
             .padding(18)
         }

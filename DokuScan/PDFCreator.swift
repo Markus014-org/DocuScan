@@ -9,8 +9,8 @@ enum PDFCreator {
         guard !pages.isEmpty else { throw UserFacingError(message: "Es wurde keine Seite gescannt.") }
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
-            kCGPDFContextCreator as String: "DokuScan",
-            kCGPDFContextTitle as String: "DokuScan OCR PDF"
+            kCGPDFContextCreator as String: "Scanchris",
+            kCGPDFContextTitle as String: "Scanchris OCR PDF"
         ]
         let renderer = UIGraphicsPDFRenderer(bounds: a4, format: format)
         return renderer.pdfData { rendererContext in

@@ -53,7 +53,7 @@ struct AddFolderView: View {
 
     var body: some View {
         Form {
-            Section("Name in DokuScan") {
+            Section("Name in Scanchris") {
                 TextField("z. B. Haushalt, Büro, Verein", text: $name)
                     .textInputAutocapitalization(.words)
                 Text("Nach der Ordnerauswahl wird dieser Name beim Beleg-Scannen angezeigt.")
