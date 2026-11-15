@@ -1,0 +1,48 @@
+name: Scanchris – Apple-Zugänge prüfen
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      TEAMID: ${{ secrets.TEAMID }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      BUNDLE_ID: ${{ vars.BUNDLE_ID || 'de.markus014.scanchris' }}
+    steps:
+      - name: Secrets und App-Kennung überprüfen (niemals Werte ausgeben)
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in TEAMID GH_PAT MATCH_PASSWORD FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret fehlt oder ist nicht freigegeben: $name"
+              missing=1
+            else
+              echo "Verfügbar: $name"
+            fi
+          done
+          if [ "$BUNDLE_ID" != 'de.markus014.scanchris' ]; then
+            echo '::error::BUNDLE_ID stimmt nicht mit Scanchris überein'
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+      - name: Zugriff auf das bestehende Match-Secrets-Repository prüfen
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_PAT" \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY_OWNER}/Match-Secrets")
+          if [ "$code" != '200' ]; then
+            echo "::error::GH_PAT kann Match-Secrets nicht lesen (HTTP $code)"
+            exit 1
+          fi
+          echo 'Match-Secrets ist erreichbar (Lesezugriff bestätigt)'

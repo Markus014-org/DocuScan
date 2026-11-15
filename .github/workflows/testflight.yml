@@ -1,4 +1,4 @@
-name: TestFlight – Archivieren und hochladen
+name: Scanchris – TestFlight hochladen
 on:
   workflow_dispatch:
 
@@ -6,89 +6,96 @@ permissions:
   contents: read
 
 jobs:
-  upload:
-    name: Signiertes iOS-Release erstellen
+  release:
+    name: Scanchris signieren und zu TestFlight hochladen
     runs-on: macos-26
     env:
-      BUNDLE_ID: ${{ vars.BUNDLE_ID }}
-      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-      CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-      MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
-      ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
-      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      TEAMID: ${{ secrets.TEAMID }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      APP_IDENTIFIER: ${{ vars.BUNDLE_ID || 'de.markus014.scanchris' }}
+      IPA_PATH: Scanchris.ipa
     steps:
       - uses: actions/checkout@v4
-      - name: Notwendige Zugangsdaten prüfen
+      - name: Bestehende Apple- und Match-Zugangsdaten prüfen
+        shell: bash
         run: |
-          for x in BUNDLE_ID APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID CERTIFICATE_PASSWORD CERTIFICATE_BASE64 MOBILEPROVISION_BASE64 ASC_PRIVATE_KEY_BASE64 KEYCHAIN_PASSWORD; do
-            if [ -z "${!x}" ]; then echo "Fehlender Wert: $x"; exit 1; fi
+          set -euo pipefail
+          for name in TEAMID GH_PAT MATCH_PASSWORD FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY APP_IDENTIFIER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Fehlt oder nicht zugänglich: $name"
+              exit 1
+            fi
           done
-      - name: Xcode-Projekt erzeugen
+          if [ "$APP_IDENTIFIER" != "de.markus014.scanchris" ]; then
+            echo "::error::BUNDLE_ID muss de.markus014.scanchris sein"
+            exit 1
+          fi
+      - name: Abhängigkeiten installieren
         run: |
-          xcodebuild -version
           brew install xcodegen
-          xcodegen generate --spec project.yml
-      - name: Signatur und Provisioning-Profil einrichten
+          gem install bundler -v 2.7.2
+          bundle _2.7.2_ install
+      - name: Xcode-Projekt erzeugen
+        shell: bash
         run: |
-          KEYCHAIN="$RUNNER_TEMP/dokuscan.keychain-db"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
-          printf '%s' "$CERTIFICATE_BASE64" | base64 -D > "$RUNNER_TEMP/dist.p12"
-          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          printf '%s' "$MOBILEPROVISION_BASE64" | base64 -D > "$RUNNER_TEMP/profile.mobileprovision"
-          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
-          mkdir -p "$HOME/.private_keys"
-          printf '%s' "$ASC_PRIVATE_KEY_BASE64" | base64 -D > "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          chmod 600 "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          set -euo pipefail
+          xcodebuild -version
+          xcodegen generate --spec project.yml
+          xcodebuild -list -project DokuScan.xcodeproj
+      - name: Signierung mit vorhandenem Fastlane Match vorbereiten
+        run: bundle _2.7.2_ exec fastlane ios prepare_signing
       - name: GitHub-Pages-Versionsadresse ermitteln
+        shell: bash
         run: |
           OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           REPO="${GITHUB_REPOSITORY#*/}"
           echo "DOKUSCAN_UPDATE_URL=https://${OWNER}.github.io/${REPO}/latest-build.json" >> "$GITHUB_ENV"
-      - name: Release archivieren
+      - name: Scanchris-Archiv und IPA erstellen
+        shell: bash
         run: |
-          set -o pipefail
-          xcodebuild -project DokuScan.xcodeproj -scheme DokuScan \
-            -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/DokuScan.xcarchive" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            DOKUSCAN_UPDATE_URL="$DOKUSCAN_UPDATE_URL" \
-            archive
-      - name: IPA exportieren
-        run: |
-          python3 scripts/make_export_plist.py
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/DokuScan.xcarchive" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -exportOptionsPlist build/ExportOptions.plist
-      - name: IPA zu TestFlight hochladen
-        run: |
-          IPA=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' -print -quit)
-          if [ -z "$IPA" ]; then echo "Keine IPA gefunden"; exit 1; fi
-          xcrun altool --upload-app -f "$IPA" -t ios \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-      - name: Technischen Bericht speichern (ohne IPA / Schlüssel)
-        if: always()
-        run: |
-          echo "TestFlight-Workflow: $GITHUB_RUN_NUMBER" > build-info.txt
-          echo "Bundle: $BUNDLE_ID" >> build-info.txt
-          echo "App-Version: 1.0" >> build-info.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
+          set -euo pipefail
+          xcodebuild archive \
+            -project DokuScan.xcodeproj \
+            -scheme DokuScan \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Scanchris.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAMID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_IDENTIFIER" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="match AppStore $APP_IDENTIFIER" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            DOKUSCAN_UPDATE_URL="$DOKUSCAN_UPDATE_URL"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string>
+          <key>signingStyle</key><string>manual</string>
+          <key>teamID</key><string>$TEAMID</string>
+          <key>provisioningProfiles</key><dict>
+          <key>$APP_IDENTIFIER</key><string>match AppStore $APP_IDENTIFIER</string>
+          </dict></dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Scanchris.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/scanchris-export"
+          IPA=$(find "$RUNNER_TEMP/scanchris-export" -maxdepth 1 -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then echo '::error::Keine IPA gefunden'; exit 1; fi
+          cp "$IPA" Scanchris.ipa
+      - name: Scanchris zu TestFlight hochladen
+        run: bundle _2.7.2_ exec fastlane ios beta
+      - name: Diagnoseprotokolle bei Fehlschlag
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          name: dokuscan-build-info
-          path: build-info.txt
+          name: scanchris-signing-diagnostics
+          path: |
+            ~/Library/Logs/gym/
+            ~/Library/Logs/DiagnosticReports/
