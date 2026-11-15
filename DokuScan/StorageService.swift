@@ -66,9 +66,14 @@ enum StorageService {
     }
 
     static func temporaryPDF(data: Data, filename: String) throws -> URL {
-        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("DokuScan-Freigabe", isDirectory: true)
-        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
-        let url = temp.appendingPathComponent(UUID().uuidString + "-" + filename)
+        // Jede Freigabe verwendet einen eigenen temporären Unterordner.
+        // So bleibt der sichtbare PDF-Dateiname exakt wie vom Benutzer gewählt,
+        // ohne dass parallele Freigaben oder alte Dateien kollidieren.
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Scanchris-Freigabe", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(filename, isDirectory: false)
         try data.write(to: url, options: .atomic)
         return url
     }
