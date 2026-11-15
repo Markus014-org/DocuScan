@@ -40,8 +40,8 @@ struct ScannedPage: Identifiable {
 }
 
 struct ReceiptFields {
-    var issuer = "Unbekannt"
-    var item = "Beleg"
+    var issuer = ""
+    var item = ""
     var date = Date()
     var total = "0,00"
     var vat = "19%"

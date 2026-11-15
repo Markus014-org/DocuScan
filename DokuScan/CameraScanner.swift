@@ -22,15 +22,16 @@ struct CameraScanner: UIViewControllerRepresentable {
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
             let images = (0..<scan.pageCount).map { scan.imageOfPage(at: $0) }
-            owner.onScanned(images)
+            DispatchQueue.main.async { self.owner.onScanned(images) }
         }
 
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            owner.onCancel()
+            DispatchQueue.main.async { self.owner.onCancel() }
         }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            owner.onFailure(error.localizedDescription)
+            let message = error.localizedDescription
+            DispatchQueue.main.async { self.owner.onFailure(message) }
         }
     }
 }

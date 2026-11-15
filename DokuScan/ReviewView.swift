@@ -56,6 +56,20 @@ struct ReviewView: View {
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
+                    if pages.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Keine gescannte Seite vorhanden", systemImage: "exclamationmark.triangle")
+                                .font(.headline)
+                            Text("Es wurde kein Bild an die Prüfansicht übergeben. Bitte scanne mindestens eine Seite, bevor du eine PDF speicherst oder versendest.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Button { showScanner = true } label: {
+                                Label("Seite jetzt scannen", systemImage: "doc.viewfinder")
+                            }
+                            .buttonStyle(PrimaryActionStyle())
+                        }
+                        .surface()
+                    }
                     if !pages.isEmpty {
                         scanPreview
                             .frame(height: 380)
@@ -155,10 +169,11 @@ struct ReviewView: View {
                     .surface()
 
                     Button(action: save) {
-                        Label("Speichern", systemImage: "square.and.arrow.down")
+                        Label("Speichern oder versenden", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(PrimaryActionStyle())
                     .disabled(pages.isEmpty || isRecognizing)
+                    .opacity(pages.isEmpty || isRecognizing ? 0.45 : 1)
 
                     if kind == .document {
                         Button { showFavoritePicker = true } label: {
@@ -166,6 +181,7 @@ struct ReviewView: View {
                         }
                         .buttonStyle(PrimaryActionStyle(tint: DokuTheme.turquoise))
                         .disabled(pages.isEmpty || isRecognizing)
+                        .opacity(pages.isEmpty || isRecognizing ? 0.45 : 1)
                     }
 
                     Text(kind == .document
@@ -200,7 +216,14 @@ struct ReviewView: View {
             CameraScanner(
                 onScanned: { images in
                     showScanner = false
+                    guard !images.isEmpty else {
+                        errorMessage = "Keine Seite aufgenommen. Bitte erneut scannen."
+                        return
+                    }
+                    let firstNewPage = pages.count
                     pages.append(contentsOf: images.map { ScannedPage(image: $0.pixelsUpright()) })
+                    selectedIndex = firstNewPage
+                    zoom = 1
                     Task { await recognizePages() }
                 },
                 onCancel: { showScanner = false },
@@ -257,6 +280,11 @@ struct ReviewView: View {
             Text("Belegdaten aus OCR").font(.headline)
             Text("Bitte Aussteller, teuerste Position, Datum, Gesamtbetrag und Steuer prüfen. OCR kann sich irren.")
                 .font(.footnote).foregroundStyle(.secondary)
+            if receipt.issuer.isEmpty || receipt.item.isEmpty {
+                Text("Ein Feld konnte nicht zuverlässig erkannt werden. Bitte Aussteller und Artikel ergänzen.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
             Group {
                 TextField("Ausstellende Firma", text: $receipt.issuer)
                 TextField("Teuerste Position", text: $receipt.item)
@@ -311,7 +339,7 @@ struct ReviewView: View {
             if kind == .document {
                 if !userRenamed { filename = FileNaming.documentName(from: text) }
             } else {
-                receipt = ReceiptNamer.parse(text)
+                receipt = ReceiptNamer.parse(segmentsByPage: pages.map(\.segments))
                 if !userRenamed { filename = FileNaming.receiptName(number: nextNumber, fields: receipt) }
             }
         } catch { errorMessage = "OCR konnte nicht abgeschlossen werden: \(error.localizedDescription)" }
@@ -345,6 +373,10 @@ struct ReviewView: View {
     }
 
     private func save() {
+        guard !pages.isEmpty else {
+            errorMessage = "Keine Seiten vorhanden. Bitte zuerst eine Seite scannen."
+            return
+        }
         if kind == .document {
             save(favorite: FavoriteDestination(kind: .share, label: "Teilen"))
         } else {
@@ -363,6 +395,10 @@ struct ReviewView: View {
     }
 
     private func save(favorite: FavoriteDestination) {
+        guard !pages.isEmpty else {
+            errorMessage = "Keine Seiten vorhanden. Bitte zuerst eine Seite scannen."
+            return
+        }
         do {
             let name = try FileNaming.filename(filename)
             let data = try PDFCreator.create(pages: pages)

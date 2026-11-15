@@ -1,14 +1,23 @@
 import SwiftUI
 import VisionKit
 
+/// Eine abgeschlossene Aufnahme bleibt bis zur Anzeige vollständig erhalten.
+/// So kann SwiftUI keine leere Review-Ansicht mit veralteten @State-Daten öffnen.
+private struct ScanSession: Identifiable {
+    let id = UUID()
+    let images: [UIImage]
+    let kind: ScanKind
+    let folderID: UUID?
+}
+
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var scanKind: ScanKind = .document
     @State private var chosenFolderID: UUID?
     @State private var showScanner = false
-    @State private var showReview = false
-    @State private var images: [UIImage] = []
+    @State private var pendingScan: ScanSession?
+    @State private var activeScan: ScanSession?
     @State private var showSettings = false
     @State private var showInformation = false
     @State private var showFavorites = false
@@ -118,14 +127,23 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
             .sheet(isPresented: $showFavorites) { NavigationStack { FavoritesView() } }
             .sheet(isPresented: $showInformation) { NavigationStack { InformationView() } }
-            .sheet(isPresented: $showScanner) {
+            .sheet(isPresented: $showScanner, onDismiss: {
+                // Erst nach dem vollständigen Schließen des Scanners präsentieren.
+                // Keine starre 0,35-Sekunden-Verzögerung und kein getrenntes images-State.
+                if let session = pendingScan {
+                    pendingScan = nil
+                    activeScan = session
+                }
+            }) {
                 CameraScanner(
                     onScanned: { result in
+                        if result.isEmpty {
+                            cameraError = "Der Scanner hat keine Seiten übergeben. Bitte erneut scannen."
+                            showCameraError = true
+                        } else {
+                            pendingScan = ScanSession(images: result, kind: scanKind, folderID: chosenFolderID)
+                        }
                         showScanner = false
-                        guard !result.isEmpty else { return }
-                        images = result
-                        // Erst nach dem Schließen der Scanner-Sheet die Review öffnen.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showReview = true }
                     },
                     onCancel: { showScanner = false },
                     onFailure: { message in
@@ -136,10 +154,11 @@ struct HomeView: View {
                 )
                 .ignoresSafeArea()
             }
-            .fullScreenCover(isPresented: $showReview) {
+            .fullScreenCover(item: $activeScan) { session in
                 NavigationStack {
-                    ReviewView(initialImages: images, kind: scanKind, receiptFolderID: chosenFolderID)
+                    ReviewView(initialImages: session.images, kind: session.kind, receiptFolderID: session.folderID)
                 }
+                .id(session.id)
             }
             .alert("Scanner", isPresented: $showCameraError) {
                 Button("OK", role: .cancel) {}
@@ -159,6 +178,7 @@ struct HomeView: View {
         }
         scanKind = kind
         chosenFolderID = folder
+        pendingScan = nil
         showScanner = true
     }
 
