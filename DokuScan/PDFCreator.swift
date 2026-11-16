@@ -5,7 +5,7 @@ import CoreText
 enum PDFCreator {
     static let a4 = CGRect(x: 0, y: 0, width: 595.28, height: 841.89)
 
-    static func create(pages: [ScannedPage]) throws -> Data {
+    static func create(pages: [ScannedPage], quality: PDFQuality = .balanced) throws -> Data {
         guard !pages.isEmpty else { throw UserFacingError(message: "Es wurde keine Seite gescannt.") }
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
@@ -16,7 +16,7 @@ enum PDFCreator {
         return renderer.pdfData { rendererContext in
             for page in pages {
                 rendererContext.beginPage()
-                let image = page.image.pixelsUpright()
+                let image = preparedImage(page.image.pixelsUpright(), quality: quality)
                 let size = image.size
                 guard size.width > 0, size.height > 0 else { continue }
                 let scale = min(a4.width / size.width, a4.height / size.height)
@@ -33,6 +33,22 @@ enum PDFCreator {
                 }
             }
         }
+    }
+
+    private static func preparedImage(_ source: UIImage, quality: PDFQuality) -> UIImage {
+        guard quality != .original else { return source }
+        let maxSide = max(source.size.width, source.size.height)
+        let factor = min(1, quality.maxDimension / max(1, maxSide))
+        let size = CGSize(width: max(1, source.size.width * factor), height: max(1, source.size.height * factor))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            source.draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let jpeg = resized.jpegData(compressionQuality: quality.compression),
+              let image = UIImage(data: jpeg) else { return resized }
+        return image
     }
 
     private static func drawInvisibleText(_ segment: OCRSegment, in imageRect: CGRect, context: CGContext) {

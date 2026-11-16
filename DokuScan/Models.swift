@@ -36,6 +36,7 @@ struct ScannedPage: Identifiable {
     var id = UUID()
     var image: UIImage
     var segments: [OCRSegment] = []
+    var ocrManuallyCorrected = false
     var recognizedText: String { segments.map(\.text).joined(separator: "\n") }
 }
 

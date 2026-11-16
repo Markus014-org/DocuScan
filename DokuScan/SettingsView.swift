@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var showAddFolder = false
+    @State private var reminderPermissionHint = false
 
     var body: some View {
         List {
@@ -30,7 +31,35 @@ struct SettingsView: View {
                 Text("Wähle einen Ordner in „Dateien“ aus. Dropbox ist möglich, wenn es dort als Speicherort eingerichtet ist. Zum Löschen einen Eintrag nach links wischen.")
             }
 
+            Section {
+                Toggle("07 · Automatische Ablageregeln", isOn: $model.preferences.routingEnabled)
+                if model.preferences.routingEnabled {
+                    NavigationLink("Ablageregeln bearbeiten") { FilingRulesView() }
+                }
+                Toggle("08 · Schlagwörter und Kategorien", isOn: $model.preferences.tagsEnabled)
+                Toggle("10 · PDF-Inhalte schwärzen", isOn: $model.preferences.redactionEnabled)
+                Toggle("12 · Rückgabe- und Garantieerinnerungen", isOn: $model.preferences.remindersEnabled)
+                Toggle("14 · Scan-Vorlagen", isOn: $model.preferences.presetsEnabled)
+                if model.preferences.presetsEnabled {
+                    NavigationLink("Vorlagen bearbeiten") { ScanPresetsView() }
+                }
+            } header: {
+                Text("Erweiterte Funktionen – einzeln aktivieren")
+            } footer: {
+                Text("Diese fünf Funktionen sind zunächst ausgeschaltet. Bestehende Scan-Abläufe bleiben unverändert. Erinnerungen benötigen die iOS-Mitteilungsberechtigung.")
+            }
+
+            Section("PDF-Qualität") {
+                Picker("Dateigröße / Bildqualität", selection: $model.preferences.pdfQuality) {
+                    ForEach(PDFQuality.allCases) { quality in Text(quality.rawValue).tag(quality) }
+                }
+                Text("Kompakt spart Speicherplatz. Auch bei komprimierten PDFs bleibt die erkannte Textebene durchsuchbar.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+
             Section("Weitere Einstellungen") {
+                NavigationLink("Dokumentenarchiv und Ausgaben") { ArchiveView() }
+                NavigationLink("Gelernte Händler verwalten") { MerchantMemoryView() }
                 NavigationLink("Favorisiertes Speichern") { FavoritesView() }
                 NavigationLink("Information und Datenschutz") { InformationView() }
             }
@@ -41,6 +70,22 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { dismiss() } } }
         .sheet(isPresented: $showAddFolder) { NavigationStack { AddFolderView() } }
+        .onChange(of: model.preferences.remindersEnabled) { _, enabled in
+            if enabled {
+                Task {
+                    if await ReminderService.requestPermission() {
+                        for record in model.records { await ReminderService.schedule(for: record) }
+                    } else { reminderPermissionHint = true }
+                }
+            } else {
+                model.records.forEach { ReminderService.cancel(for: $0) }
+            }
+        }
+        .alert("Mitteilungen nicht erlaubt", isPresented: $reminderPermissionHint) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Die Funktion ist aktiviert, aber iOS erlaubt momentan keine Erinnerungen. Erlaube Mitteilungen für Scanchris in den iPhone-Einstellungen.")
+        }
     }
 }
 
