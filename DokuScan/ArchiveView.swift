@@ -194,7 +194,7 @@ private struct ArchiveDocumentView: View {
                             do {
                                 let pdf = try Data(contentsOf: ArchiveStore.url(for: record))
                                 sharing = ArchiveShared(url: try StorageService.temporaryPDF(data: pdf, filename: record.filename))
-                            } catch { error = error.localizedDescription }
+                            } catch { self.error = error.localizedDescription }
                         }
                     }
                 }
