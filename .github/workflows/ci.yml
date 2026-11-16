@@ -11,6 +11,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Funktionen und Opt-in-Einstellungen prüfen
+        run: python3 scripts/check_feature_contracts.py
       - name: Xcode und XcodeGen vorbereiten
         run: |
           xcodebuild -version
