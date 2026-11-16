@@ -1,60 +1,103 @@
 import SwiftUI
 
+/// Hilfe zur aktuell implementierten Scanchris-Oberfläche.
+/// Die Seite informiert; sie verändert weder Scanabläufe noch Einstellungen.
 struct InformationView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                header("Willkommen bei Scanchris", icon: "doc.text.viewfinder")
-                paragraph("Scanchris erstellt aus abfotografierten Seiten mehrseitige, durchsuchbare PDF-Dateien im DIN-A4-Format. Der Scanner erkennt Dokumentkanten, korrigiert die Perspektive und unterstützt das Scannen mehrerer Seiten hintereinander.")
+                header("Scanchris – schnell starten", icon: "doc.text.viewfinder")
+                paragraph("Scanchris scannt Dokumente und Kassenbons, erkennt Text direkt auf dem iPhone und erstellt mehrseitige, durchsuchbare A4-PDFs. Die beiden ursprünglichen Scanwege bleiben erhalten. Erweiterte Funktionen findest du im Menü oder in den Einstellungen.")
 
-                header("1 · Dokument scannen", icon: "doc.text")
-                paragraph("Auf der Startseite „Dokument scannen“ antippen. Im Apple-Scanner die Seiten nacheinander aufnehmen. Wenn die automatische Aufnahme angeboten wird, hältst du das iPhone ruhig über die Seite. Kontrolliere unten im Scanner die aufgenommenen Seiten und beende den Scan mit „Sichern“ bzw. „Fertig“.")
-                paragraph("Danach Seite für Seite mit den Miniaturbildern auswählen, mit zwei Fingern vergrößern und über „Bearbeiten“ beschneiden, um 90° drehen oder löschen. Über „Weitere Seiten“ kannst du den Scan fortsetzen. Im Abschnitt „Erkannter Text (OCR)“ lässt sich die Texterkennung prüfen.")
-                paragraph("Der vorgeschlagene Dateiname beginnt mit JJMMTT und danach einem erkannten Stichwort, z. B. 261114_Vertrag.pdf. Du kannst ihn frei ändern. „Speichern“ öffnet die iOS-Teilen-Ansicht. Dort findest du „In Dateien sichern“, E-Mail, AirDrop und weitere installierte Apps.")
+                header("Dokument scannen", icon: "doc.text")
+                paragraph("Auf der Startseite „Dokument scannen“ wählen. Eine oder mehrere Seiten im Apple-Dokumentenscanner aufnehmen und den Scan abschließen. Danach kannst du Seiten prüfen, vergrößern, drehen, beschneiden, löschen oder weitere Seiten hinzufügen.")
+                paragraph("Der Dateiname wird vorgeschlagen und kann frei geändert werden. „Speichern“ öffnet die iOS-Teilen-Ansicht: Dort kannst du „In Dateien sichern“, Mail, AirDrop oder andere Apps auswählen. „Favorisiertes Speichern“ verwendet einen zuvor angelegten Favoriten. Beim Speichern entsteht zusätzlich eine lokale Archivkopie.")
 
-                header("2 · Beleg scannen", icon: "receipt")
-                paragraph("„Beleg scannen“ öffnen und einen hinterlegten Speicherort auswählen. Der Scan erfolgt wie beim Dokument. Die App liest die PDF-Dateinamen im gewählten Ordner und erhöht die größte dreistellige Anfangsnummer um 1.")
-                paragraph("Aus dem erkannten Text werden Aussteller, vermutlich teuerste Artikelposition, Belegdatum, Gesamtbetrag und Mehrwertsteuer als Vorschlag ermittelt. Prüfe diese Felder unbedingt: Die OCR kann Preise, Firmennamen und Steuersätze verwechseln. Mit „Dateinamen aus diesen Feldern übernehmen“ wird der Vorschlag neu erstellt. Auch den gesamten Dateinamen kannst du direkt bearbeiten.")
-                paragraph("Das Format lautet 017_Firma_Artikel_14.11.2026_(41,32 - 19%).pdf. Unter dem Dateinamen wird die zuletzt gespeicherte Datei mit der höchsten laufenden Nummer angezeigt. „Speichern“ legt die PDF direkt im ausgewählten Ordner ab. Existiert derselbe Dateiname bereits, wird eine Endung ergänzt, statt die Datei zu überschreiben.")
+                header("Beleg scannen", icon: "receipt")
+                paragraph("Wie bisher zunächst einen eingerichteten Zielordner auswählen, anschließend den Beleg scannen. Prüfe Firma, teuerste Position, Datum, Gesamtbetrag und Mehrwertsteuer. Die Erkennung macht Vorschläge, keine verbindliche Rechnungsprüfung. Mit „Dateinamen aus diesen Feldern übernehmen“ aktualisierst du den Vorschlag.")
+                paragraph("„Speichern“ legt die PDF im zuvor gewählten Ordner ab und erstellt eine zusätzliche Kopie im lokalen Scanchris-Archiv. Die laufende dreistellige Nummer richtet sich nach den Dateien im Zielordner. Bereits vorhandene gleichnamige Dateien werden nicht überschrieben.")
 
-                header("3 · Speicherorte und Dropbox", icon: "folder")
-                paragraph("Im Menü unter „Einstellungen“ → „Neuer Speicherort“ einen Namen eingeben und dann in der iOS-Dateien-App einen bestehenden Ordner auswählen. Der angezeigte Name kann z. B. „Privat“, „Büro“ oder „Verein“ lauten. Entfernen: einen Speicherort in den Einstellungen nach links wischen.")
-                paragraph("Dropbox funktioniert über die offizielle Dropbox-App als Speicheranbieter der iOS-Dateien-App. Aktiviere Dropbox dort unter „Durchsuchen“ und wähle anschließend den Dropbox-Ordner aus. Scanchris hat keine eigene Dropbox-Anmeldung. Die Synchronisierung eines dort abgelegten Dokuments erfolgt durch den Dateianbieter, nicht durch Scanchris. Bei fehlendem Internet kann die Synchronisierung verzögert sein.")
+                if model.preferences.routingEnabled {
+                    header("Beleg mit Ablageregeln", icon: "arrow.triangle.branch")
+                    paragraph("Dieser dritte Scan-Button erscheint nur, wenn du unter Einstellungen „07 · Automatische Ablageregeln“ aktiviert hast. Lege dort zunächst Regeln wie „REWE → Lebensmittel“ und die passenden Speicherorte an. Beim Scan wird anhand des erkannten Händlers und Bonkopfs der Zielordner vorgeschlagen. Die erste passende Regel gewinnt. In der Prüfansicht kannst du den Ordner vor dem Speichern ändern. Findet sich keine Regel, wählst du den Ordner selbst.")
+                } else {
+                    header("Optional: Beleg mit Ablageregeln", icon: "arrow.triangle.branch")
+                    paragraph("Wenn du Belege automatisch nach Händler ablegen möchtest, aktiviere unter Einstellungen „07 · Automatische Ablageregeln“ und lege mindestens eine Regel an. Erst dann erscheint auf der Startseite der Button „Beleg mit Ablageregeln“. Das normale Belegscannen bleibt unverändert.")
+                }
 
-                header("4 · Favorisiertes Speichern", icon: "star")
-                paragraph("In „Favoriten“ kannst du deine Ordner sowie „Teilen und Apps“ oder einen E-Mail-Empfänger dauerhaft hinterlegen. Bei „Dokument scannen“ wählst du „Favorisiertes Speichern“ und danach den Favoriten. Ordner werden direkt beschrieben. Für E-Mails öffnet sich das E-Mail-Verfassenfenster, wenn Apple Mail eingerichtet ist; andernfalls öffnet sich die Teilen-Ansicht. Bei anderen Apps und AirDrop erfolgt die Auswahl aus Sicherheitsgründen weiterhin in der iOS-Teilen-Ansicht. Favoriten lassen sich durch Wischen löschen.")
+                header("01 · Intelligentere Belegerkennung", icon: "text.magnifyingglass")
+                paragraph("Die OCR wertet bei Belegen nicht nur Textzeilen aus, sondern berücksichtigt auch die Position erkannter Texte und Preise. So können Händler und teuerste Artikelposition besser vorgeschlagen werden. Summen, Steuern und Zahlungsangaben sollen möglichst nicht als Artikel gelten. Bitte alle Werte vor dem Speichern kontrollieren.")
 
-                header("5 · OCR und PDF", icon: "text.viewfinder")
-                paragraph("Die Texterkennung verwendet Apples Vision-Framework lokal auf dem iPhone. Der Scan wird als Bild in die PDF gelegt; erkannter Text wird als unsichtbare Textschicht an den passenden Stellen eingebettet. Damit kann der PDF-Text von geeigneten PDF-Apps durchsucht und kopiert werden. Die A4-Seite wird bei abweichendem Seitenverhältnis nicht gestreckt, sondern passend eingepasst.")
+                header("02 · OCR-Text korrigieren", icon: "text.badge.checkmark")
+                paragraph("In der Prüfansicht „OCR-Text korrigieren“ öffnen, Text überarbeiten und übernehmen. Wenn möglich Zeilenanzahl und -reihenfolge beibehalten, damit die unsichtbare PDF-Textebene an den richtigen Stellen liegt. Korrekturen wirken auf den erkannten Text; das fotografierte Bild wird dadurch nicht umgeschrieben.")
 
-                header("6 · Datenschutz und Verschlüsselung", icon: "lock.shield")
-                paragraph("Die App sendet Scans und OCR-Texte nicht an einen Scanchris-Server. Ordnernamen, Favoriten und die Zugriffs-Lesezeichen für gewählte Ordner werden lokal in den App-Einstellungen (UserDefaults) gespeichert; exportierte Dokumente liegen ausschließlich dort, wo du sie ablegst. Für temporäre Freigaben erzeugt Scanchris PDF-Dateien im temporären App-Verzeichnis.")
-                paragraph("Scanchris implementiert keine eigene Ende-zu-Ende-Verschlüsselung. Der App-Sandbox-Schutz und die systemeigene Datenverschlüsselung/Data Protection von iOS gelten für lokale Daten. Dateien auf iCloud Drive oder Dropbox unterliegen der jeweiligen Verschlüsselung, Übertragung und Synchronisierung des Anbieters. Über deren Ende-zu-Ende-Verschlüsselung trifft Scanchris keine Zusage.")
-                paragraph("Die Versionsprüfung ruft nur eine öffentliche HTTPS-JSON-Datei mit freigegebener TestFlight-Versions- und Buildnummer ab. Es werden keine gescannten Dokumente dafür übertragen. Die App meldet eine neue Version oben links in Türkis, sobald die veröffentlichte Nummer höher als die installierte ist. Der Hinweis erscheint nur, wenn die GitHub-Actions-Versionsveröffentlichung eingerichtet wurde.")
+                header("03 · Scanqualität prüfen", icon: "viewfinder")
+                paragraph("Bei auffälliger Bildqualität zeigt die Prüfansicht Hinweise, zum Beispiel zu geringer Auflösung, Dunkelheit, Überbelichtung oder niedrigem Kontrast. Das sind Warnungen, keine Garantie für eine perfekte Texterkennung. Du kannst einen Scan auch mit Hinweis speichern.")
 
-                header("7 · Grenzen und Tipps", icon: "lightbulb")
-                paragraph("Kontrast, Beleuchtung und ruhiges Halten verbessern das Ergebnis. Die automatische Aufnahme wird durch Apples Scanner gesteuert; je nach iOS-Version oder Situation kann eine manuelle Auslösung nötig sein. QR-Codes, handgeschriebene Notizen, Mehrwertsteuer und komplizierte Rechnungen werden nicht immer zuverlässig erkannt. Ohne Zugriff auf den gewählten Speicherort bitte den Ordner erneut hinterlegen. Eine PDF ist durchsuchbar, aber kein rechtlich garantiert vollständig ausgelesenes Rechnungsdatenset.")
-                paragraph("Scanchris enthält keine Eingabe von Uhrzeiten. Sollten später solche Felder hinzukommen, sind iOS-Rad-Zeitwähler vorgesehen.")
+                header("04 · Bilder und PDFs importieren", icon: "doc.badge.plus")
+                paragraph("Im Menü „PDF oder Bild importieren“ oder „Fotos importieren“ wählen. Importierte Seiten werden wie gescannte Dokumente geprüft und per OCR verarbeitet. Ein Import ist auf maximal 30 Seiten begrenzt; vorhandene PDFs werden dafür als Bildseiten eingelesen und beim Speichern neu erzeugt.")
+
+                header("05 · Doppelte Dokumente erkennen", icon: "doc.on.doc")
+                paragraph("Scanchris vergleicht neue Dokumente mit Einträgen im lokalen Archiv. Bei Belegen werden Händler, Datum und Gesamtbetrag genutzt, bei Dokumenten längere OCR-Texte. Wird eine mögliche Dublette erkannt, kannst du den Vorgang abbrechen oder trotzdem speichern. Nicht jede Doppelung wird erkannt.")
+
+                header("06 · Dokumentenarchiv und Suche", icon: "tray.full")
+                paragraph("Über das Menü „Archiv & Ausgaben“ kannst du gespeicherte Archivkopien öffnen, nach Dateinamen und OCR-Inhalt suchen sowie Dokumente erneut teilen. Mit „Nur Belege“ schränkst du die Liste ein. Das Archiv liegt lokal in der App und ist von Dateien in Dropbox, iCloud oder anderen gewählten Ordnern getrennt. Das Löschen eines Archiveintrags löscht nicht automatisch die extern gespeicherte Originaldatei.")
+
+                header("07 · Automatische Ablageregeln (optional)", icon: "arrow.triangle.branch")
+                paragraph("In Einstellungen einschalten und über „Ablageregeln bearbeiten“ einen Suchbegriff für den Händler sowie einen Zielordner festlegen. Die Regeln werden nur bei „Beleg mit Ablageregeln“ verwendet. Beim normalen „Beleg scannen“ bestimmst du den Zielordner weiterhin selbst.")
+
+                header("08 · Kategorien und Schlagwörter (optional)", icon: "tag")
+                paragraph("Erst nach Aktivierung in Einstellungen erscheinen zusätzliche Eingabefelder für Kategorie und kommagetrennte Schlagwörter in der Prüfansicht. Diese Angaben werden im lokalen Archiv gespeichert und können bei der Suche genutzt werden. Im Archiv kannst du dann auch nach Kategorien filtern.")
+
+                header("09 · PDF-Qualität und Dateigröße", icon: "doc.zipper")
+                paragraph("Unter Einstellungen → PDF-Qualität zwischen „Kompakt“, „Ausgewogen“ und „Hohe Qualität“ wählen. Kompakte Dateien benötigen weniger Speicherplatz, können aber feine Schrift im Bild weniger scharf darstellen. Die durchsuchbare OCR-Textebene bleibt Bestandteil des PDFs.")
+
+                header("10 · Inhalte schwärzen (optional)", icon: "rectangle.dashed")
+                paragraph("Nach Aktivierung unter Einstellungen steht in der Prüfansicht die Schwärzungsfunktion bereit. Ziehe schwarze Rechtecke über vertrauliche Stellen und übernimm die Bearbeitung. Scanchris verändert die Bildpixel und führt anschließend die OCR neu aus, damit alter verdeckter Text nicht aus der vorherigen Texterkennung in die neue PDF übernommen wird. Kontrolliere den gesamten Inhalt vor dem Weitergeben und speichere das ungeschwärzte Original bei Bedarf zuvor separat.")
+
+                header("11 · Ausgabenübersicht und CSV", icon: "chart.bar.xaxis")
+                paragraph("Im Archiv erscheinen für erkannte Belege Ausgaben nach Monaten und Händlern sowie eine Schätzung der Umsatzsteuer bei eindeutigen 7 % oder 19 %. Mit „Belegdaten als CSV exportieren“ kannst du die erfassten Belegangaben als Tabelle weitergeben. OCR-Fehler, gemischte Steuersätze oder fehlende Beträge können die Auswertung verfälschen; sie ersetzt keine Buchhaltung.")
+
+                header("12 · Rückgabe- und Garantieerinnerungen (optional)", icon: "bell")
+                paragraph("Aktiviere die Funktion unter Einstellungen und erlaube bei Bedarf iOS-Mitteilungen. Danach kannst du bei Belegen Rückgabefrist und Garantieende individuell einschalten und Daten festlegen. Die App plant lokale Hinweise grundsätzlich drei Tage vor einer Rückgabefrist beziehungsweise 30 Tage vor Garantieende; liegt dieser Zeitpunkt bereits in der Vergangenheit, wird der Termin selbst verwendet. Ohne Mitteilungsberechtigung erhältst du keine Hinweise.")
+
+                header("13 · Häufige Händler wiedererkennen", icon: "storefront")
+                paragraph("Wenn du beim Beleg einen erkannten Firmennamen korrigierst und speicherst, kann sich Scanchris diese Zuordnung lokal merken und künftig vorschlagen. Unter Einstellungen → „Gelernte Händler verwalten“ kannst du diese Zuordnungen ansehen und löschen. Bereits gespeicherte PDFs bleiben dadurch unverändert.")
+
+                header("14 · Scan-Vorlagen (optional)", icon: "square.stack")
+                paragraph("Aktiviere „Scan-Vorlagen“ unter Einstellungen und lege eine Vorlage mit Namen, Scanart und gegebenenfalls Zielordner oder Dateinamensschema an. Sobald mindestens eine Vorlage vorhanden ist, erscheint auf der Startseite „Scan-Vorlage starten“. Der normale Scanweg bleibt weiterhin verfügbar. Unterstützte Platzhalter: {datum}, {titel}, {firma}, {artikel}, {betrag} und {nr}.")
+
+                header("Speicherorte, Dropbox und Favoriten", icon: "folder")
+                paragraph("Unter Einstellungen → „Neuer Speicherort“ einen bereits vorhandenen Ordner aus der iOS-Dateien-App auswählen und in Scanchris benennen. Dropbox kann über die installierte Dropbox-App als Speicheranbieter in „Dateien“ eingebunden werden. Scanchris besitzt keine eigene Dropbox-Anmeldung; die Synchronisierung erfolgt durch den jeweiligen Dateianbieter. Unter „Favoriten“ kannst du Ordner, E-Mail-Empfänger oder die Teilen-Ansicht als Schnellziel hinterlegen.")
+
+                header("Datenschutz und Grenzen", icon: "lock.shield")
+                paragraph("Die OCR verarbeitet Scans lokal auf dem iPhone; Scanchris betreibt keinen eigenen Server zum Hochladen von Dokumenten. Das zusätzliche Archiv speichert PDF-Kopien im privaten App-Speicher, während Ordner, Favoriten, Einstellungen, Regeln, Händlerzuordnungen und Archiv-Metadaten lokal verwaltet werden. Beim Teilen, beim Speichern in Cloud-Ordnern oder beim Versand gelten die Datenschutz- und Synchronisierungsbedingungen des gewählten Dienstes.")
+                paragraph("Scanchris bietet keine eigene Ende-zu-Ende-Verschlüsselung. Die iOS-Systemschutzmechanismen gelten für lokale App-Daten. Die optionale TestFlight-Versionsprüfung lädt eine öffentliche Versionsdatei über HTTPS, überträgt dabei aber keine Scaninhalte. Schlechte Beleuchtung, Beleglayouts, Handschrift und OCR-Fehler können die Ergebnisse beeinflussen; bitte wichtige Dokument- und Belegdaten prüfen.")
             }
             .padding(18)
         }
         .background(DokuTheme.background.ignoresSafeArea())
         .navigationTitle("Information")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { dismiss() } } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Fertig") { dismiss() }
+            }
+        }
     }
 
-    private func header(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
+    private func header(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
             .font(.headline)
             .foregroundStyle(DokuTheme.ink)
             .padding(.top, 8)
     }
 
-    private func paragraph(_ text: String) -> some View {
-        Text(text)
+    private func paragraph(_ content: String) -> some View {
+        Text(content)
             .font(.subheadline)
             .foregroundStyle(DokuTheme.ink)
             .fixedSize(horizontal: false, vertical: true)
