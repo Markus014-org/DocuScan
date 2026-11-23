@@ -11,33 +11,52 @@ enum StorageService {
         return url
     }
 
+    /// Erfasst Dateien im tatsächlichen Zielordner, auch wenn sie außerhalb
+    /// von Scanchris hinzugefügt wurden. Unterordner zählen nicht mit.
+    private static func fileNames(in directory: URL) throws -> [String] {
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+        )
+        return urls.filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+        }.map(\.lastPathComponent)
+    }
+
+    private static func nextReceiptNumber(in filenames: [String]) throws -> Int {
+        let maximum = filenames.compactMap(FileNaming.receiptSequenceNumber(from:)).max() ?? 0
+        guard maximum < 999 else {
+            throw UserFacingError(message: "Die höchste Nummer im Zielordner ist 999. Bitte einen neuen Zielordner wählen, damit die dreistellige Nummerierung erhalten bleibt.")
+        }
+        return maximum + 1
+    }
+
     static func snapshot(for folder: SavedFolder) throws -> FolderSnapshot {
         let url = try resolve(folder)
         let granted = url.startAccessingSecurityScopedResource()
         defer { if granted { url.stopAccessingSecurityScopedResource() } }
         var coordinationError: NSError?
         var readError: Error?
-        var names: [String] = []
+        var result: FolderSnapshot?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinated in
             do {
-                let files = try FileManager.default.contentsOfDirectory(at: coordinated, includingPropertiesForKeys: nil)
-                names = files.filter { $0.pathExtension.lowercased() == "pdf" }.map(\.lastPathComponent)
+                let filenames = try fileNames(in: coordinated)
+                let numbered = filenames.compactMap { name -> (Int, String)? in
+                    guard let value = FileNaming.receiptSequenceNumber(from: name) else { return nil }
+                    return (value, name)
+                }
+                let last = numbered.max { $0.0 < $1.0 }
+                result = FolderSnapshot(nextNumber: try nextReceiptNumber(in: filenames), lastName: last?.1)
             } catch { readError = error }
         }
         if let error = coordinationError { throw error }
         if let error = readError { throw error }
-        let numbered: [(number: Int, filename: String)] = names.compactMap { name in
-            let prefix = name.prefix(while: { $0.isASCII && $0.isNumber })
-            guard prefix.count >= 3,
-                  name.dropFirst(prefix.count).first == "_", let number = Int(prefix) else { return nil }
-            return (number, name)
-        }
-        let previous = numbered.max(by: { $0.number < $1.number })
-        return FolderSnapshot(nextNumber: (previous?.number ?? 0) + 1, lastName: previous?.filename)
+        guard let result else { throw UserFacingError(message: "Der Zielordner konnte nicht gelesen werden.") }
+        return result
     }
 
     @discardableResult
-    static func save(_ fileData: Data, filename: String, in folder: SavedFolder) throws -> URL {
+    static func save(_ fileData: Data, filename: String, in folder: SavedFolder,
+                     numberReceipt: Bool = false) throws -> URL {
         let folderURL = try resolve(folder)
         let granted = folderURL.startAccessingSecurityScopedResource()
         defer { if granted { folderURL.stopAccessingSecurityScopedResource() } }
@@ -45,18 +64,43 @@ enum StorageService {
         var coordinationError: NSError?
         var savingError: Error?
         var writtenURL: URL?
-        // In den koordinierten Ordner schreiben (iCloud/Dropbox-Dateianbieter).
+        // Beim Speichern INNERHALB der koordinierten Operation erneut nachsehen.
+        // Damit werden auch neue externe Dateien seit Öffnen der Prüfansicht erfasst.
         NSFileCoordinator().coordinate(writingItemAt: folderURL, options: .forMerging, error: &coordinationError) { coordinatedFolder in
             do {
-                var candidate = coordinatedFolder.appendingPathComponent(filename, isDirectory: false)
-                let original = candidate.deletingPathExtension().lastPathComponent
-                var suffix = 2
-                while FileManager.default.fileExists(atPath: candidate.path) {
-                    candidate = coordinatedFolder.appendingPathComponent("\(original)_\(suffix).pdf")
-                    suffix += 1
+                let manager = FileManager.default
+                let base = (filename as NSString).deletingPathExtension
+                var number = numberReceipt ? try nextReceiptNumber(in: fileNames(in: coordinatedFolder)) : 0
+                var suffix = 1
+                while true {
+                    let proposed: String
+                    if numberReceipt {
+                        guard number <= 999 else {
+                            throw UserFacingError(message: "Keine freie dreistellige Belegnummer mehr vorhanden. Bitte einen neuen Zielordner wählen.")
+                        }
+                        proposed = FileNaming.renumberReceiptFilename(filename, number: number)
+                    } else {
+                        proposed = suffix == 1 ? filename : "\(base)_\(suffix).pdf"
+                    }
+                    let candidate = coordinatedFolder.appendingPathComponent(proposed, isDirectory: false)
+                    if manager.fileExists(atPath: candidate.path) {
+                        if numberReceipt { number += 1 } else { suffix += 1 }
+                        continue
+                    }
+                    do {
+                        // .withoutOverwriting schützt Belege vor einem Dateikonflikt
+                        // zwischen Prüfung und Schreibvorgang. Diese Option darf
+                        // nicht mit .atomic kombiniert werden. Dokumente behalten
+                        // die bisherige atomare Schreibweise.
+                        try fileData.write(to: candidate,
+                                           options: numberReceipt ? [.withoutOverwriting] : [.atomic])
+                        writtenURL = folderURL.appendingPathComponent(candidate.lastPathComponent)
+                        break
+                    } catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+                                                     error.code == NSFileWriteFileExistsError {
+                        if numberReceipt { number += 1 } else { suffix += 1 }
+                    }
                 }
-                try fileData.write(to: candidate, options: .atomic)
-                writtenURL = folderURL.appendingPathComponent(candidate.lastPathComponent)
             } catch { savingError = error }
         }
         if let error = coordinationError { throw error }

@@ -352,6 +352,12 @@ struct ReviewView: View {
         }
     }
 
+    // Nach OCR erkannte Sondersteuersätze wie 16 % bleiben im Picker auswählbar.
+    private var vatChoices: [String] {
+        let common = ["19%", "7%", "0%", "gemischt", "unbekannt"]
+        return common.contains(receipt.vat) ? common : [receipt.vat] + common
+    }
+
     private var receiptForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Belegdaten aus OCR").font(.headline)
@@ -373,7 +379,7 @@ struct ReviewView: View {
                     Text("Mehrwertsteuer")
                     Spacer()
                     Picker("Mehrwertsteuer", selection: $receipt.vat) {
-                        ForEach(["19%", "7%", "0%", "gemischt", "unbekannt"], id: \.self) { option in
+                        ForEach(vatChoices, id: \.self) { option in
                             Text(option).tag(option)
                         }
                     }
@@ -423,9 +429,18 @@ struct ReviewView: View {
             let result = try await Task.detached(priority: .userInitiated) {
                 try StorageService.snapshot(for: folder)
             }.value
+            // Falls während der Ordnerabfrage der Zielordner gewechselt wurde,
+            // darf kein veralteter Zähler auf einen anderen Ordner angewandt werden.
+            guard id == targetFolderID, !Task.isCancelled else { return }
             nextNumber = result.nextNumber
             lastSavedName = result.lastName
-            if !userRenamed { filename = proposedName(text: pages.map(\.recognizedText).joined(separator: "\n")) }
+            if !userRenamed {
+                filename = proposedName(text: pages.map(\.recognizedText).joined(separator: "\n"))
+            } else if !editingFilename && !filename.isEmpty {
+                // Nach einem Ordnerwechsel die Nummer anpassen, ohne den manuell
+                // korrigierten Rest des Dateinamens zu verändern.
+                filename = FileNaming.renumberReceiptFilename(filename, number: nextNumber)
+            }
         } catch { errorMessage = "Ordner konnte nicht gelesen werden: \(error.localizedDescription)" }
     }
 
@@ -574,14 +589,20 @@ struct ReviewView: View {
                 guard let id = targetFolderID, let folder = model.folders.first(where: { $0.id == id }) else {
                     throw UserFacingError(message: "Bitte zuerst einen Zielordner für den Beleg auswählen.")
                 }
-                savedURL = try StorageService.save(pdf, filename: name, in: folder)
+                savedURL = try StorageService.save(pdf, filename: name, in: folder, numberReceipt: true)
                 location = folder.name
             } else if let favorite = target, favorite.kind == .folder {
                 guard let id = favorite.folderID, let folder = model.folders.first(where: { $0.id == id }) else {
                     throw UserFacingError(message: "Dieser favorisierte Ordner wurde nicht gefunden.")
                 }
-                savedURL = try StorageService.save(pdf, filename: name, in: folder)
+                savedURL = try StorageService.save(pdf, filename: name, in: folder,
+                                                   numberReceipt: kind == .receipt)
                 location = folder.name
+            }
+            // Die tatsächliche Nummer kann sich beim Speichern durch neue Dateien
+            // im Zielordner geändert haben. Sie wird auch im Archiv verwendet.
+            if kind == .receipt, let actualName = savedURL?.lastPathComponent {
+                filename = (actualName as NSString).deletingPathExtension
             }
             var record = SavedRecord(filename: savedURL?.lastPathComponent ?? name,
                                      storedFile: UUID().uuidString + ".pdf", kind: kind.rawValue)

@@ -15,11 +15,49 @@ enum FileNaming {
     static func receiptName(number: Int, fields: ReceiptFields) -> String {
         let serial = String(format: "%03d", number)
         let issuer = cleanComponent(fields.issuer)
-        let item = cleanComponent(fields.item)
+        let item = cleanComponent(withoutLeadingArticleNumber(fields.item))
         let date = format(fields.date, pattern: "dd.MM.yyyy")
         let total = fields.total.trimmingCharacters(in: .whitespacesAndNewlines)
         let vat = fields.vat.trimmingCharacters(in: .whitespacesAndNewlines)
         return "\(serial)_\(issuer.isEmpty ? "Firma" : issuer)_\(item.isEmpty ? "Position" : item)_\(date)_(\(total.isEmpty ? "0,00" : total) - \(vat.isEmpty ? "unbekannt" : vat))"
+    }
+
+    /// Nur drei ASCII-Ziffern direkt vor Bindestrich, Unterstrich oder Leerzeichen
+    /// gelten als laufende Belegnummer. Beispiele: 012_Bon / 012-Bon / 012 Bon.
+    /// 0123_Bon, 012Bon und 012.pdf zählen ausdrücklich NICHT.
+    static func receiptSequenceNumber(from filename: String) -> Int? {
+        let prefix = filename.prefix(3)
+        guard prefix.count == 3,
+              prefix.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let separator = filename.dropFirst(3).first,
+              separator == "_" || separator == "-" || separator == " " else { return nil }
+        return Int(String(prefix))
+    }
+
+    /// Ersetzt ausschließlich die laufende Nummer am Anfang. Manuell geänderte
+    /// Firma, Artikel, Datum und Betrag bleiben im restlichen Dateinamen erhalten.
+    /// Bei einer Vorlage ohne führende Nummer wird die Nummer vorangestellt.
+    static func renumberReceiptFilename(_ filename: String, number: Int) -> String {
+        let prefix = String(format: "%03d", number)
+        if receiptSequenceNumber(from: filename) != nil {
+            return prefix + String(filename.dropFirst(3))
+        }
+        return prefix + "_" + filename
+    }
+
+    /// Entfernt nur eine vorangestellte, wenigstens dreistellige Artikelnummer
+    /// samt Trennzeichen. Produktziffern wie "iPhone 16" oder "Cola 1,5 l"
+    /// werden nicht angerührt; der ursprüngliche OCR-Text bleibt unverändert.
+    static func withoutLeadingArticleNumber(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Mengenangaben ("500 g Mehl", "750 ml Saft") sind keine Artikelnummer.
+        let unitPrefix = #"^\d{1,4}\s+(?:g|kg|mg|ml|cl|l|stk|stück|packung)\b"#
+        if trimmed.range(of: unitPrefix, options: [.regularExpression, .caseInsensitive]) != nil {
+            return trimmed
+        }
+        let pattern = #"^\d{3,}(?:\s*[-_.:/]\s*|\s+)(?=\p{L})"#
+        return trimmed.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func filename(_ editableName: String) throws -> String {
@@ -90,7 +128,10 @@ enum ReceiptNamer {
         var fields = ReceiptFields()
         let lines = pages.flatMap { $0 }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard !lines.isEmpty else { return fields }
+        guard !lines.isEmpty else {
+            fields.vat = "unbekannt"
+            return fields
+        }
 
         fields.issuer = merchant(from: pages.first ?? [])
         let text = lines.joined(separator: "\n")
@@ -148,11 +189,9 @@ enum ReceiptNamer {
             fields.item = maximum.name
         }
 
-        let lower = text.lowercased()
-        let has7 = lower.range(of: #"\b7\s*%"#, options: .regularExpression) != nil
-        let has19 = lower.range(of: #"\b19\s*%"#, options: .regularExpression) != nil
-        let has0 = lower.range(of: #"\b0\s*%"#, options: .regularExpression) != nil
-        fields.vat = has7 && has19 ? "gemischt" : has7 ? "7%" : has19 ? "19%" : has0 ? "0%" : "unbekannt"
+        // Nicht irgendeinen Prozentsatz nehmen (etwa einen 10-%-Rabatt), sondern
+        // erst MwSt., andernfalls USt./Umsatzsteuer, andernfalls Steuer/Steuersatz.
+        fields.vat = taxRate(from: lines)
         return fields
     }
 
@@ -230,7 +269,63 @@ enum ReceiptNamer {
         var title = line.replacingOccurrences(of: pricePattern, with: " ", options: .regularExpression)
         title = title.replacingOccurrences(of: #"(?i)\b\d+\s*[x×]\s*$"#, with: " ", options: .regularExpression)
         title = title.replacingOccurrences(of: #"(?i)\b(?:eur|euro|stk)\b"#, with: " ", options: .regularExpression)
-        return FileNaming.cleanComponent(title)
+        return FileNaming.cleanComponent(FileNaming.withoutLeadingArticleNumber(title))
+    }
+
+    /// Steuerprozent mit klarer Beschriftung. Reihenfolge der Priorität:
+    /// Mehrwertsteuer / MwSt. > Umsatzsteuer / USt. > Steuer / Steuersatz.
+    /// Zwei unterschiedliche zugehörige Sätze ergeben "gemischt".
+    private static func taxRate(from lines: [String]) -> String {
+        let labels = [
+            #"(?<![\p{L}])(?:mehrwertsteuer|mehrwertst\.?|mwst\.?)(?![\p{L}])"#,
+            #"(?<![\p{L}])(?:umsatzsteuer|ust\.?)(?![\p{L}])"#,
+            #"(?<![\p{L}])(?:steuersatz|steuer(?:satz|anteil|betrag)?)(?![\p{L}])"#
+        ]
+        for label in labels {
+            var values: [String] = []
+            for (index, line) in lines.enumerated() {
+                guard line.range(of: label, options: [.regularExpression, .caseInsensitive]) != nil else { continue }
+                // USt-ID und Steuernummer bezeichnen keine Steuerprozentsätze.
+                if line.range(of: #"(?i)(?:ust|steuer)[\s.:/-]*(?:id(?:nr)?|ident(?:ifikationsnummer)?|nummer|nr)(?![\p{L}])"#,
+                              options: .regularExpression) != nil { continue }
+                let sameLine = percentages(in: line)
+                if !sameLine.isEmpty {
+                    values.append(contentsOf: sameLine)
+                    continue
+                }
+                // Typisches Tabellenlayout: "Umsatzsteuer" als Überschrift,
+                // darunter "A 19,00 % ..." und "B 7,00 % ...".
+                for nextIndex in (index + 1)..<min(lines.count, index + 4) {
+                    let following = lines[nextIndex]
+                    let taxRow = #"(?i)^\s*(?:[a-z]\s+)?\d{1,3}(?:[.,]\d{1,2})?\s*%"#
+                    guard following.range(of: taxRow, options: .regularExpression) != nil else { break }
+                    values.append(contentsOf: percentages(in: following))
+                }
+            }
+            if !values.isEmpty {
+                let distinct = Set(values)
+                return distinct.count > 1 ? "gemischt" : values[0]
+            }
+        }
+        return "unbekannt"
+    }
+
+    private static func percentages(in line: String) -> [String] {
+        let pattern = #"(?<!\d)(\d{1,3}(?:[.,]\d{1,2})?)\s*%(?!\d)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return regex.matches(in: line, range: NSRange(line.startIndex..., in: line)).compactMap { match in
+            guard let range = Range(match.range(at: 1), in: line) else { return nil }
+            let raw = String(line[range]).replacingOccurrences(of: ",", with: ".")
+            guard let rate = Decimal(string: raw, locale: Locale(identifier: "en_US_POSIX")),
+                  rate >= 0 && rate <= 100,
+                  let display = formatter.string(from: rate as NSDecimalNumber) else { return nil }
+            return display + "%"
+        }
     }
 
     private static func validItem(_ title: String) -> Bool {
