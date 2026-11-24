@@ -34,6 +34,8 @@ struct HomeView: View {
     @State private var showFavorites = false
     @State private var showCameraError = false
     @State private var cameraError = ""
+    @State private var versionResult = UpdateChecker.CheckResult(banner: nil, details: "Versionsprüfung noch nicht durchgeführt.")
+    @State private var showVersionDetails = false
 
     var body: some View {
         NavigationStack {
@@ -41,13 +43,13 @@ struct HomeView: View {
                 DokuTheme.background.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if model.newerTestFlightBuild {
+                        if let versionBanner = versionResult.banner {
                             Button {
                                 if let url = URL(string: "https://testflight.apple.com/") {
                                     UIApplication.shared.open(url)
                                 }
                             } label: {
-                                Label("Neue Version in TestFlight verfügbar", systemImage: "arrow.down.circle.fill")
+                                Label(versionBanner, systemImage: "arrow.down.circle.fill")
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(DokuTheme.turquoise)
                                     .multilineTextAlignment(.leading)
@@ -155,6 +157,12 @@ struct HomeView: View {
                             Label("Fotos importieren", systemImage: "photo.on.rectangle")
                         }
                         Button("Favoriten", systemImage: "star") { showFavorites = true }
+                        Button("TestFlight-Build prüfen", systemImage: "arrow.clockwise") {
+                            Task {
+                                await refreshVersion()
+                                showVersionDetails = true
+                            }
+                        }
                         Button("Information", systemImage: "info.circle") { showInformation = true }
                     } label: {
                         Image(systemName: "line.3.horizontal.decrease.circle")
@@ -217,6 +225,9 @@ struct HomeView: View {
                 }
                 .id(session.id)
             }
+            .alert("TestFlight-Buildprüfung", isPresented: $showVersionDetails) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(versionResult.details) }
             .alert("Scanner", isPresented: $showCameraError) {
                 Button("OK", role: .cancel) {}
             } message: { Text(cameraError) }
@@ -260,6 +271,8 @@ struct HomeView: View {
     }
 
     private func refreshVersion() async {
-        model.newerTestFlightBuild = await UpdateChecker.isNewBuildAvailable()
+        let result = await UpdateChecker.check()
+        versionResult = result
+        model.newerTestFlightBuild = result.hasNewerBuild
     }
 }
