@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$ASC_BETA_GROUP_ID" ]; then
-            echo '::notice::ASC_BETA_GROUP_ID fehlt. Nur der optionale Update-Hinweis ist noch nicht eingerichtet.'
+            echo '::warning::ASC_BETA_GROUP_ID fehlt: keine bestätigte TestFlight-Versionsdatei. Die App erkennt erfolgreiche TestFlight-Uploads stattdessen direkt über die öffentliche GitHub-API.'
             exit 0
           fi
           if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
