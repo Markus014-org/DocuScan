@@ -54,7 +54,11 @@ enum PDFCreator {
         // Die interne Kompression des PDF-Renderers bleibt Sache von Core Graphics.
         guard quality != .lossless else { return enhanced }
         let maxSide = max(enhanced.size.width, enhanced.size.height)
-        let factor = min(1, quality.maxDimension / max(1, maxSide))
+        // FIX: 0 bedeutet „keine Größenbeschränkung“ (Hohe Qualität), nicht 0 Pixel.
+        // Ansonsten wurde die gesamte Seite versehentlich auf 1 × 1 Pixel geschrumpft.
+        let factor = quality.maxDimension > 0
+            ? min(1, quality.maxDimension / max(1, maxSide))
+            : 1
         let size = CGSize(width: max(1, enhanced.size.width * factor), height: max(1, enhanced.size.height * factor))
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
