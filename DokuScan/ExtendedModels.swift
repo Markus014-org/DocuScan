@@ -8,18 +8,46 @@ struct ScanPreferences: Codable, Equatable {
     var remindersEnabled = false       // 12
     var presetsEnabled = false         // 14
     var pdfQuality: PDFQuality = .balanced // 09
+    var scanAppearance: ScanAppearance = .automatic
+
+    // Ohne eigene Decoder-Implementierung gingen beim App-Update die bisher
+    // gespeicherten Opt-in-Schalter verloren, weil der neue Schlüssel fehlt.
+    init() {}
+    private enum CodingKeys: String, CodingKey {
+        case routingEnabled, tagsEnabled, redactionEnabled, remindersEnabled
+        case presetsEnabled, pdfQuality, scanAppearance
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        routingEnabled = try values.decodeIfPresent(Bool.self, forKey: .routingEnabled) ?? false
+        tagsEnabled = try values.decodeIfPresent(Bool.self, forKey: .tagsEnabled) ?? false
+        redactionEnabled = try values.decodeIfPresent(Bool.self, forKey: .redactionEnabled) ?? false
+        remindersEnabled = try values.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? false
+        presetsEnabled = try values.decodeIfPresent(Bool.self, forKey: .presetsEnabled) ?? false
+        pdfQuality = try values.decodeIfPresent(PDFQuality.self, forKey: .pdfQuality) ?? .balanced
+        scanAppearance = try values.decodeIfPresent(ScanAppearance.self, forKey: .scanAppearance) ?? .automatic
+    }
+}
+
+enum ScanAppearance: String, CaseIterable, Codable, Identifiable {
+    case automatic = "Automatisch optimiert"
+    case blackWhite = "Schwarz-Weiß"
+    case grayscale = "Graustufen"
+    case original = "Original / Farbe"
+    var id: String { rawValue }
 }
 
 enum PDFQuality: String, CaseIterable, Codable, Identifiable {
     case compact = "Kompakt"
     case balanced = "Ausgewogen"
-    case original = "Hohe Qualität"
+    case original = "Hohe Qualität" // bisher gespeicherter Wert bleibt gültig
+    case lossless = "Ohne JPEG-Neukomprimierung"
     var id: String { rawValue }
     var maxDimension: CGFloat {
-        switch self { case .compact: return 1400; case .balanced: return 2200; case .original: return 0 }
+        switch self { case .compact: return 1400; case .balanced: return 2200; case .original, .lossless: return 0 }
     }
     var compression: CGFloat {
-        switch self { case .compact: return 0.58; case .balanced: return 0.82; case .original: return 1 }
+        switch self { case .compact: return 0.58; case .balanced: return 0.82; case .original, .lossless: return 1 }
     }
 }
 

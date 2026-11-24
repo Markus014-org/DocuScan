@@ -12,6 +12,11 @@ private struct MailFile: Identifiable {
     let recipient: String
 }
 
+private struct ExportRequest: Identifiable {
+    let id = UUID()
+    let favorite: FavoriteDestination?
+}
+
 struct ReviewView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -34,6 +39,8 @@ struct ReviewView: View {
     @State private var showRedaction = false
     @State private var duplicateWarning = false
     @State private var pendingDestination: FavoriteDestination?
+    @State private var exportRequest: ExportRequest?
+    @State private var isExporting = false
     @State private var pages: [ScannedPage]
     @State private var selectedIndex = 0
     @State private var filename = ""
@@ -217,7 +224,7 @@ struct ReviewView: View {
                         Label("Speichern oder versenden", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(PrimaryActionStyle())
-                    .disabled(pages.isEmpty || isRecognizing)
+                    .disabled(pages.isEmpty || isRecognizing || isExporting)
                     .opacity(pages.isEmpty || isRecognizing ? 0.45 : 1)
 
                     if kind == .document {
@@ -225,7 +232,7 @@ struct ReviewView: View {
                             Label("Favorisiertes Speichern", systemImage: "star.fill")
                         }
                         .buttonStyle(PrimaryActionStyle(tint: DokuTheme.turquoise))
-                        .disabled(pages.isEmpty || isRecognizing)
+                        .disabled(pages.isEmpty || isRecognizing || isExporting)
                         .opacity(pages.isEmpty || isRecognizing ? 0.45 : 1)
                     }
 
@@ -238,9 +245,21 @@ struct ReviewView: View {
                 .padding(17)
             }
         }
+        .overlay {
+            if isExporting {
+                ZStack {
+                    Color.black.opacity(0.16).ignoresSafeArea()
+                    ProgressView("PDF wird erstellt …")
+                        .padding(22)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Button("Schließen") { dismiss() } }
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Schließen") { dismiss() }.disabled(isExporting)
+            }
         }
         .task {
             updateQuality()
@@ -312,6 +331,20 @@ struct ReviewView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { save(favorite: destination) }
                 }
             }
+        }
+        // Der Qualitätsvergleich öffnet sich vor jeder Dateiablage oder Freigabe.
+        .sheet(item: $exportRequest) { request in
+            ExportReviewView(pages: pages, appearance: model.preferences.scanAppearance,
+                             quality: model.preferences.pdfQuality,
+                             onCancel: { exportRequest = nil },
+                             onConfirm: { originalIDs in
+                                 let destination = request.favorite
+                                 exportRequest = nil
+                                 // Erst nach Schließen der Prüfansicht ein anderes Sheet zeigen.
+                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                     finishSave(favorite: destination, originalPageIDs: originalIDs)
+                                 }
+                             })
         }
         .sheet(item: $sharedFile) { ShareSheet(fileURL: $0.url) }
         .sheet(item: $mailFile) { mail in
@@ -578,10 +611,33 @@ struct ReviewView: View {
     }
 
     private func performSave(favorite: FavoriteDestination?) {
-        guard !pages.isEmpty else { return }
-        do {
-            let name = try FileNaming.filename(filename)
-            let pdf = try PDFCreator.create(pages: pages, quality: model.preferences.pdfQuality)
+        guard !pages.isEmpty && !isRecognizing else { return }
+        exportRequest = ExportRequest(favorite: favorite)
+    }
+
+    private func finishSave(favorite: FavoriteDestination?, originalPageIDs: Set<UUID>) {
+        guard !pages.isEmpty && !isRecognizing && !isExporting else { return }
+        isExporting = true
+        let snapshot = pages
+        let quality = model.preferences.pdfQuality
+        let appearance = model.preferences.scanAppearance
+        Task {
+            do {
+                // Bildaufbereitung und PDF-Erstellung von der Oberfläche entkoppeln.
+                let pdf = try await Task.detached(priority: .userInitiated) {
+                    try PDFCreator.create(pages: snapshot, quality: quality,
+                                          appearance: appearance, originalPageIDs: originalPageIDs)
+                }.value
+                try savePreparedPDF(pdf, favorite: favorite)
+            } catch {
+                errorMessage = "PDF konnte nicht erstellt oder gespeichert werden: \(error.localizedDescription)"
+            }
+            isExporting = false
+        }
+    }
+
+    private func savePreparedPDF(_ pdf: Data, favorite: FavoriteDestination?) throws {
+        let name = try FileNaming.filename(filename)
             let target: FavoriteDestination? = favorite
             var location = "Lokales Archiv / Teilen"
             var savedURL: URL?
@@ -636,7 +692,6 @@ struct ReviewView: View {
             } else {
                 sharedFile = ShareFile(url: try StorageService.temporaryPDF(data: pdf, filename: name))
             }
-        } catch { errorMessage = error.localizedDescription }
     }
 
 }

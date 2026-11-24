@@ -49,11 +49,18 @@ struct SettingsView: View {
                 Text("Diese fünf Funktionen sind zunächst ausgeschaltet. Bestehende Scan-Abläufe bleiben unverändert. Erinnerungen benötigen die iOS-Mitteilungsberechtigung.")
             }
 
-            Section("PDF-Qualität") {
-                Picker("Dateigröße / Bildqualität", selection: $model.preferences.pdfQuality) {
+            Section("Dokumentdarstellung") {
+                Picker("Bildverbesserung", selection: $model.preferences.scanAppearance) {
+                    ForEach(ScanAppearance.allCases) { mode in Text(mode.rawValue).tag(mode) }
+                }
+                Text("Papier und Schrift werden erst für die PDF-Ausgabe optimiert. Vor jedem Speichern oder Versenden kannst du jede Seite mit dem Original vergleichen und die Verbesserung zurücknehmen.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("PDF-Dateigröße") {
+                Picker("Komprimierung", selection: $model.preferences.pdfQuality) {
                     ForEach(PDFQuality.allCases) { quality in Text(quality.rawValue).tag(quality) }
                 }
-                Text("Kompakt spart Speicherplatz. Auch bei komprimierten PDFs bleibt die erkannte Textebene durchsuchbar.")
+                Text("Kompakt und Ausgewogen verwenden JPEG und reduzieren gegebenenfalls die Pixelzahl. „Ohne JPEG-Neukomprimierung“ erhält die verarbeiteten Bildpixel ohne erneute JPEG-Stufe; der PDF-Renderer bestimmt seine interne Speicherung. Der OCR-Text bleibt durchsuchbar.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
 
