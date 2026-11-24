@@ -335,14 +335,20 @@ struct ReviewView: View {
         // Der Qualitätsvergleich öffnet sich vor jeder Dateiablage oder Freigabe.
         .sheet(item: $exportRequest) { request in
             ExportReviewView(pages: pages, appearance: model.preferences.scanAppearance,
-                             quality: model.preferences.pdfQuality,
+                             quality: kind == .document
+                                 ? model.preferences.documentPDFQuality
+                                 : model.preferences.receiptPDFQuality,
+                             choiceMode: kind == .document
+                                 ? model.preferences.documentPDFChoice
+                                 : model.preferences.receiptPDFChoice,
                              onCancel: { exportRequest = nil },
-                             onConfirm: { originalIDs in
+                             onConfirm: { preparedPDF in
                                  let destination = request.favorite
                                  exportRequest = nil
-                                 // Erst nach Schließen der Prüfansicht ein anderes Sheet zeigen.
+                                 // Die gemessene und geprüfte PDF wird unverändert gespeichert.
+                                 // Erst nach Schließen der Prüfansicht das nächste Sheet öffnen.
                                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                     finishSave(favorite: destination, originalPageIDs: originalIDs)
+                                     finishSave(favorite: destination, pdf: preparedPDF)
                                  }
                              })
         }
@@ -615,25 +621,16 @@ struct ReviewView: View {
         exportRequest = ExportRequest(favorite: favorite)
     }
 
-    private func finishSave(favorite: FavoriteDestination?, originalPageIDs: Set<UUID>) {
+    private func finishSave(favorite: FavoriteDestination?, pdf: Data) {
         guard !pages.isEmpty && !isRecognizing && !isExporting else { return }
         isExporting = true
-        let snapshot = pages
-        let quality = model.preferences.pdfQuality
-        let appearance = model.preferences.scanAppearance
-        Task {
-            do {
-                // Bildaufbereitung und PDF-Erstellung von der Oberfläche entkoppeln.
-                let pdf = try await Task.detached(priority: .userInitiated) {
-                    try PDFCreator.create(pages: snapshot, quality: quality,
-                                          appearance: appearance, originalPageIDs: originalPageIDs)
-                }.value
-                try savePreparedPDF(pdf, favorite: favorite)
-            } catch {
-                errorMessage = "PDF konnte nicht erstellt oder gespeichert werden: \(error.localizedDescription)"
-            }
-            isExporting = false
+        do {
+            // Exakt die PDF verwenden, deren Größe vorab angezeigt wurde.
+            try savePreparedPDF(pdf, favorite: favorite)
+        } catch {
+            errorMessage = "PDF konnte nicht gespeichert oder versendet werden: \(error.localizedDescription)"
         }
+        isExporting = false
     }
 
     private func savePreparedPDF(_ pdf: Data, favorite: FavoriteDestination?) throws {

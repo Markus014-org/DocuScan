@@ -7,8 +7,13 @@ struct ScanPreferences: Codable, Equatable {
     var redactionEnabled = false       // 10
     var remindersEnabled = false       // 12
     var presetsEnabled = false         // 14
-    var pdfQuality: PDFQuality = .balanced // 09
+    // Alter gemeinsamer Wert: nur noch als Migrationswert für bestehende Installationen.
+    var pdfQuality: PDFQuality = .balanced // 09 (Kompatibilität)
     var scanAppearance: ScanAppearance = .automatic
+    var documentPDFChoice: PDFExportChoice = .askEveryTime
+    var receiptPDFChoice: PDFExportChoice = .askEveryTime
+    var documentPDFQuality: PDFQuality = .balanced
+    var receiptPDFQuality: PDFQuality = .balanced
 
     // Ohne eigene Decoder-Implementierung gingen beim App-Update die bisher
     // gespeicherten Opt-in-Schalter verloren, weil der neue Schlüssel fehlt.
@@ -16,6 +21,7 @@ struct ScanPreferences: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case routingEnabled, tagsEnabled, redactionEnabled, remindersEnabled
         case presetsEnabled, pdfQuality, scanAppearance
+        case documentPDFChoice, receiptPDFChoice, documentPDFQuality, receiptPDFQuality
     }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -24,9 +30,20 @@ struct ScanPreferences: Codable, Equatable {
         redactionEnabled = try values.decodeIfPresent(Bool.self, forKey: .redactionEnabled) ?? false
         remindersEnabled = try values.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? false
         presetsEnabled = try values.decodeIfPresent(Bool.self, forKey: .presetsEnabled) ?? false
-        pdfQuality = try values.decodeIfPresent(PDFQuality.self, forKey: .pdfQuality) ?? .balanced
+        let formerQuality = try values.decodeIfPresent(PDFQuality.self, forKey: .pdfQuality) ?? .balanced
+        pdfQuality = formerQuality
         scanAppearance = try values.decodeIfPresent(ScanAppearance.self, forKey: .scanAppearance) ?? .automatic
+        documentPDFChoice = try values.decodeIfPresent(PDFExportChoice.self, forKey: .documentPDFChoice) ?? .askEveryTime
+        receiptPDFChoice = try values.decodeIfPresent(PDFExportChoice.self, forKey: .receiptPDFChoice) ?? .askEveryTime
+        documentPDFQuality = try values.decodeIfPresent(PDFQuality.self, forKey: .documentPDFQuality) ?? formerQuality
+        receiptPDFQuality = try values.decodeIfPresent(PDFQuality.self, forKey: .receiptPDFQuality) ?? formerQuality
     }
+}
+
+enum PDFExportChoice: String, CaseIterable, Codable, Identifiable {
+    case askEveryTime = "Bei jedem Scan auswählen"
+    case fixed = "Fest eingestellt"
+    var id: String { rawValue }
 }
 
 enum ScanAppearance: String, CaseIterable, Codable, Identifiable {
@@ -47,7 +64,7 @@ enum PDFQuality: String, CaseIterable, Codable, Identifiable {
         switch self { case .compact: return 1400; case .balanced: return 2200; case .original, .lossless: return 0 }
     }
     var compression: CGFloat {
-        switch self { case .compact: return 0.58; case .balanced: return 0.82; case .original, .lossless: return 1 }
+        switch self { case .compact: return 0.58; case .balanced: return 0.82; case .original: return 0.94; case .lossless: return 1 }
     }
 }
 

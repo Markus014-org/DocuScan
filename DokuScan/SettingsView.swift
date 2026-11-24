@@ -56,11 +56,36 @@ struct SettingsView: View {
                 Text("Papier und Schrift werden erst für die PDF-Ausgabe optimiert. Vor jedem Speichern oder Versenden kannst du jede Seite mit dem Original vergleichen und die Verbesserung zurücknehmen.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            Section("PDF-Dateigröße") {
-                Picker("Komprimierung", selection: $model.preferences.pdfQuality) {
-                    ForEach(PDFQuality.allCases) { quality in Text(quality.rawValue).tag(quality) }
+            Section("PDF – Dokument scannen") {
+                Picker("Dateigröße / Qualität", selection: $model.preferences.documentPDFChoice) {
+                    ForEach(PDFExportChoice.allCases) { choice in Text(choice.rawValue).tag(choice) }
                 }
-                Text("Kompakt und Ausgewogen verwenden JPEG und reduzieren gegebenenfalls die Pixelzahl. „Ohne JPEG-Neukomprimierung“ erhält die verarbeiteten Bildpixel ohne erneute JPEG-Stufe; der PDF-Renderer bestimmt seine interne Speicherung. Der OCR-Text bleibt durchsuchbar.")
+                if model.preferences.documentPDFChoice == .fixed {
+                    Picker("Festgelegte Qualität", selection: $model.preferences.documentPDFQuality) {
+                        ForEach(PDFQuality.allCases) { quality in Text(quality.rawValue).tag(quality) }
+                    }
+                } else {
+                    Text("Beim Export die tatsächlichen PDF-Dateigrößen vergleichen und einmalig eine Qualität wählen.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("PDF – Beleg scannen") {
+                Picker("Dateigröße / Qualität", selection: $model.preferences.receiptPDFChoice) {
+                    ForEach(PDFExportChoice.allCases) { choice in Text(choice.rawValue).tag(choice) }
+                }
+                if model.preferences.receiptPDFChoice == .fixed {
+                    Picker("Festgelegte Qualität", selection: $model.preferences.receiptPDFQuality) {
+                        ForEach(PDFQuality.allCases) { quality in Text(quality.rawValue).tag(quality) }
+                    }
+                } else {
+                    Text("Beim Export die tatsächlichen PDF-Dateigrößen vergleichen und einmalig eine Qualität wählen.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Dateigröße und Bildqualität") {
+                Text("Bei fester Qualität erscheint weiterhin die Bildkontrolle mit Originalvergleich, jedoch ohne Komprimierungsauswahl. Kompakt verkleinert stärker, Ausgewogen moderat, Hohe Qualität nutzt die volle Auflösung mit hochwertigem JPEG und Ohne JPEG-Neukomprimierung vermeidet diese zusätzliche Verluststufe. Die endgültige Größe wird vor dem Speichern angezeigt. Die PDF-Textebene bleibt durchsuchbar.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
 

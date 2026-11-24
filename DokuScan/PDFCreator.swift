@@ -44,14 +44,15 @@ enum PDFCreator {
     static func preparedImage(_ source: UIImage, quality: PDFQuality,
                               appearance: ScanAppearance, useOriginal: Bool) -> UIImage {
         let upright = source.pixelsUpright()
-        if useOriginal { return upright }
-        let enhanced = DocumentEnhancer.process(upright, mode: appearance)
-        // Bei Schwarz-Weiß das 1-Bit-Bild unverändert belassen. Ein JPEG-Durchlauf
-        // würde an scharfen Schriftkanten wieder graue Artefakte erzeugen.
-        if appearance == .blackWhite { return enhanced }
-        // Kein erneuter JPEG-Durchlauf und keine Verkleinerung bei verlustfreier Wahl.
-        // Das verwendete PDF-Framework entscheidet über sein internes Bildformat.
-        guard quality != .original && quality != .lossless else { return enhanced }
+        // Original heißt keine Bildverbesserung; die separat gewählte PDF-Größe
+        // gilt auch hier. Zuschnitte, Drehungen und Schwärzungen bleiben erhalten.
+        let enhanced = useOriginal ? upright : DocumentEnhancer.process(upright, mode: appearance)
+        // Schwarz-Weiß darf nicht erneut als JPEG kodiert werden, weil damit
+        // an den zuvor binarisierten Schriftkanten graue Artefakte entstünden.
+        if appearance == .blackWhite && !useOriginal { return enhanced }
+        // Die verlustfreie Wahl vermeidet weitere Resampling-/JPEG-Schritte.
+        // Die interne Kompression des PDF-Renderers bleibt Sache von Core Graphics.
+        guard quality != .lossless else { return enhanced }
         let maxSide = max(enhanced.size.width, enhanced.size.height)
         let factor = min(1, quality.maxDimension / max(1, maxSide))
         let size = CGSize(width: max(1, enhanced.size.width * factor), height: max(1, enhanced.size.height * factor))
